@@ -1,31 +1,41 @@
+import os
+
+from Bio import SeqIO, Seq
+
 
 
 class Component:
     def __init__(self, name, sequence, structure=None, esm2_embed=None,
-                 esm3_embed=None, canonical=False, homologs=None, full_seq=None):
+                 esm3_embed=None):
         self.name = name
         self.sequence = sequence
         self.structure = structure
         self.esm2_embed = esm2_embed
         self.esm3_embed = esm3_embed
-        self.canonical = canonical
-        self.homologs = homologs
-        self.full_seq = full_seq
+        self.homologs={}
 
-    def get_full_seq(self, blast_db):
-        pass
+    def get_full_seq(self, allergen):
+        blast_results=allergen.blast_db.Blast(self.sequence)
+        blast_results=blast_results.sort_values("bitscore", ascending=False)
+        best_match=blast_results["saccver"][blast_results["bitscore"]==blast_results["bitscore"].max()].to_list()
 
-    def get_homolog(self, blast_db):
-        pass
+        self.proteome_sequence=[]
+        for item in best_match:
+            self.proteome_sequence.append(Seq.Seq(allergen.proteome.fetch(item)))
 
-    def get_esm2_embed(self, pipeline):
-        pass
+        return self
 
-    def get_esm3_embed(self, pipeline):
-        pass
+    def get_homologs(self, allergen, return_seq=True):
+        blast_results = allergen.blast_db.Blast(self.sequence)
+        blast_results = blast_results.sort_values("bitscore", ascending=False)
+        best_match = blast_results["saccver"][blast_results["bitscore"] == blast_results["bitscore"].max()].to_list()
 
-    def get_foldseeek_seq(self, foldseek):
-        pass
+        if return_seq:
+            homologs={}
+            for item in best_match:
+                homologs[item]=(Seq.Seq(allergen.proteome.fetch(item)))
+        else:
+            homologs=best_match
 
-    def sasa(self):
-        pass
+        self.homologs[allergen.name]=homologs
+        return self

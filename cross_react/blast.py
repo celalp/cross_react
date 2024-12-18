@@ -8,7 +8,7 @@ import pandas as pd
 
 
 class Blast:
-    def __init__(self, path=None, db=None, dbtype="n"):
+    def __init__(self, path=None, db=None, db_name="blast", dbtype="n"):
         """
         initiate a Blast class instance
         :param path: path of the executable if none will check $PATH
@@ -34,7 +34,7 @@ class Blast:
             if not os.path.exists(db):
                 raise FileNotFoundError("Your blast database path does not exist")
             else:
-                self.db = db
+                self.db = db+"/"+db_name
                 if dbtype == "n":
                     self.db_type = "n"
                 elif dbtype == "p":
@@ -44,7 +44,7 @@ class Blast:
         else:
             self.db = None
 
-    def create_db(self, fasta, output_path, dbname, dbtype="n", overwrite=True, arg_dict=None):
+    def create_db(self, fasta, output_path, dbname, overwrite=True, arg_dict=None):
         """
         create a blast databse and stor in self.db
         :param dbtype: database type n for nucleotide and p for protein
@@ -63,12 +63,6 @@ class Blast:
         :return: nothing just puts the new database path in self.db after database creation
         :rtype: None
         """
-        if dbtype == "n":
-            dbtype = "nucl"
-        elif dbtype == "p":
-            dbtype = "prot"
-        else:
-            raise ValueError("You can only have a nucleotide 'n' or a protein 'p' database")
 
         if not os.path.isfile(fasta):
             raise FileNotFoundError("{} does not exists".format(fasta))
@@ -80,7 +74,7 @@ class Blast:
         arguments = self.__parse_args__(arg_dict)
         dbname = os.path.join(output_path, dbname)
 
-        command = "makeblastdb -dbtype {} -input_type fasta -in {} -out {} {}".format(dbtype, fasta, dbname, arguments)
+        command = "makeblastdb -dbtype {} -input_type fasta -in {} -out {} {}".format(self.dbtype, fasta, dbname, arguments)
         makedb = sub.Popen(command.split(" "), stdout=sub.PIPE, stderr=sub.PIPE)
         makedb_out, makedb_err = makedb.communicate()
 
@@ -117,25 +111,41 @@ class Blast:
         arguments = self.__parse_args__(arg_dict)
         command = command + arguments
         if output_type == "tabular":
-            command.append("-outfmt 6")
             if cols is None:
-                cols = ["qaccver", "saccver", "pident", "length", "mismatch", "gapopen", "qstart", "qend",
-                        "sstart", "send", "evalue", "bitscore"]
-            for col in cols:
-                command.append(col)
+                cols=["qaccver", "saccver", "pident", "length", "mismatch", "gapopen", "qstart",
+                      "qend", "sstart", "send", "evalue", "bitscore"]
+
+                command_cols = "-outfmt '6 qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore'"
+            else:
+                command_cols=" ".join(cols)
+                command_cols="-outfmt"+"'"+"6 "+command_cols+"'"
+            command.append(command_cols)
+
         if output_type == "json":
             command.append("-outfmt 15")
 
+
+
+        fasta_seq=">query\n"+str(seq)
+        with open("tmp.fasta", "w") as tmp_fasta:
+            tmp_fasta.write(fasta_seq)
+        command.append("-query tmp.fasta")
+
         command = " ".join(command)
         blast = sub.Popen(command, shell=True, stdin=sub.PIPE, stdout=sub.PIPE, stderr=sub.STDOUT)
-        results, err = blast.communicate(str.encode(str(seq)))
+        results, err = blast.communicate()
 
         if blast.returncode != 0:
             warnings.warn("Blast run resulted in an error please see the error in the output")
             return err
         else:
-            parsed_results = self.__parse_output__(out_type=output_type, results=results, cols=cols)
-            return parsed_results
+            if output_type=="tabular":
+                parsed_results = self.__parse_output__(out_type=output_type, results=results,
+                                                       cols=cols)
+
+        os.remove("tmp.fasta")
+        return parsed_results
+
 
     def __parse_args__(self, arg_dict):
         """
@@ -147,8 +157,11 @@ class Blast:
         :rtype: list
         """
         arguments = []
-        for arg in arg_dict.keys():
-            arguments = arguments + ["-" + arg, arg_dict[arg]]
+        if arg_dict is not None:
+            for arg in arg_dict.keys():
+                arguments = arguments + ["-" + arg, arg_dict[arg]]
+        else:
+            arguments=[""]
         return arguments
 
     def __parse_output__(self, out_type, results, cols=None):
@@ -162,22 +175,8 @@ class Blast:
         :rtype:
         """
         if out_type == "tabular":
-            keys = {}
-            for col in cols:
-                keys[col] = []
-            lines = str(results).split("\\n")
-            for i in range(len(lines)):
-                if i < 5:
-                    continue
-                elif i < len(lines) - 2:
-                    values = lines[i].split("\\t")
-                    for col, value in zip(cols, values):
-                        keys[col].append(value)
-                elif i == (len(lines) - 3):
-                    break
-                i += 1
-            parsed = pd.DataFrame(keys)
-
+            parsed=pd.DataFrame([item.split("\t") for item in results.decode().split("\n")][:-1])
+            parsed.columns=cols
         elif out_type == "json":
             parsed = json.loads(results)
 
