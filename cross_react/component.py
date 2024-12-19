@@ -1,7 +1,7 @@
 import os
 
-from Bio import SeqIO, Seq
-
+from Bio import Seq
+from biotite.sequence import sasa
 
 
 class Component:
@@ -39,3 +39,7 @@ class Component:
 
         self.homologs[allergen.name]=homologs
         return self
+
+    def get_sasa(self, **kwargs):
+        structure=self.structure.get_structure()
+        str_sasa=sasa(structure, **kwargs)

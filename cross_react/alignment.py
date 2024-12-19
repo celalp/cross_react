@@ -1,23 +1,41 @@
 # this will contain the code to create msa alignment between component claseses it will take a list of components
+from functools import partial
 
-import os
-import subprocess as sub
-import warnings
-from shutil import which
+import biotite.sequence.align as align
+from biotite.sequence import ProteinSequence
+from biotite.structure import superimpose, rmsd, rmspd
+from biotite.structure.io.pdb import PDBFile
 
-import pandas as pd
+matrix=align.SubstitutionMatrix.std_protein_matrix()
 
 class SequenceAlignment:
-    def __init__(self, aligner):
-        pass
+    def __init__(self, matrix=matrix, **kwargs):
+        self.matrix = matrix
+        self.aligner=partial(align.align_multiple(matrix=matrix, **kwargs))
 
-    def __call__(self, *args, **kwargs):
-        pass
-
-    def distances(self):
-        pass
-
+    def __call__(self, components):
+        sequences=[]
+        for component in components:
+            sequences.append(str(component.sequence))
+        self.alignments=self.aligne(sequences=sequences)
+        self.distances=self.alignments[3]
+        return self
 
 class StructureAlignment:
-    def __init__(self, aligner):
-        pass
+    # this calculates rmsd between structures this can be a whole structure or a part
+    def __init__(self, structure1, structure2):
+        self.structure1=structure1.get_structure()
+        self.structure2=structure2.get_structure()
+
+
+    def align(self, **kwargs):
+        aligned, transformation = superimpose(self.structure1, self.structure2, **kwargs)
+        self.aligned=aligned
+        self.transformation=transformation
+        return self
+
+    def rmsd(self):
+        struct_rmsd=rmsd(self.structure1, self.structure2)
+        self.rmsd=struct_rmsd
+        return self
+

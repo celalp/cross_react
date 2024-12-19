@@ -3,7 +3,7 @@ import os
 import pysam
 import pandas as pd
 from Bio import SeqIO
-from Bio.PDB import PDBParser
+from biotite.structure.io.pdb import PDBFile
 
 from .blast import Blast
 from .component import Component
@@ -71,7 +71,7 @@ class Allergen:
             for record in SeqIO.parse(f, "fasta"):
                 name=record.id
                 sequence=record.seq
-                structure=parser.get_structure(name, os.path.join(structures_folder, name+".pdb"))
+                structure = PDBFile.read(os.path.join(structures_folder, name+".pdb"))
                 esm2=esm2_embeddings[name]
                 esm3=esm3_embeddings[name]
                 self.components[name]=Component(name=name, sequence=sequence,
